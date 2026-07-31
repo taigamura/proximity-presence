@@ -67,3 +67,31 @@ export async function recordPush(pool: Pool, userToken: string, sentAt: Date): P
     [userToken, sentAt],
   );
 }
+
+/** Look up APNs device tokens for a set of user tokens. */
+export async function getApnsTokens(
+  pool: Pool,
+  userTokens: string[],
+): Promise<Map<string, string>> {
+  if (userTokens.length === 0) return new Map();
+  const placeholders = userTokens.map((_, i) => `$${i + 1}`).join(', ');
+  const res = await pool.query<{ user_token: string; apns_token: string }>(
+    `SELECT user_token, apns_token FROM device_tokens WHERE user_token IN (${placeholders})`,
+    userTokens,
+  );
+  return new Map(res.rows.map((r) => [r.user_token, r.apns_token]));
+}
+
+/** Register or replace a device's APNs token. */
+export async function upsertDeviceToken(
+  pool: Pool,
+  userToken: string,
+  apnsToken: string,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO device_tokens (user_token, apns_token)
+     VALUES ($1, $2)
+     ON CONFLICT (user_token) DO UPDATE SET apns_token = EXCLUDED.apns_token, registered_at = NOW()`,
+    [userToken, apnsToken],
+  );
+}

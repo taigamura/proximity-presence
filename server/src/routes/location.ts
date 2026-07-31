@@ -8,7 +8,9 @@ import {
   getFriendEdges,
   getRecentPushes,
   recordPush,
+  getApnsTokens,
 } from '../domain/repository';
+import { getPushProvider } from '../platform/apns';
 
 export const locationRouter = Router();
 
@@ -45,8 +47,20 @@ locationRouter.post('/', async (req: Request, res: Response) => {
     recentPushes,
   );
 
-  // Record pushes and dispatch (APNs dispatch stubbed until issue #4).
-  await Promise.all(tokensToNotify.map((t) => recordPush(pool, t, now)));
+  if (tokensToNotify.length > 0) {
+    const apnsTokenMap = await getApnsTokens(pool, tokensToNotify);
+    const push = getPushProvider();
+
+    await Promise.all(
+      tokensToNotify.map(async (userToken) => {
+        await recordPush(pool, userToken, now);
+        const apnsToken = apnsTokenMap.get(userToken);
+        if (apnsToken) {
+          await push.sendSilentPush(apnsToken);
+        }
+      }),
+    );
+  }
 
   res.status(200).json({ ok: true, notified: tokensToNotify.length });
 });

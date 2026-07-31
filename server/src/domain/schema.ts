@@ -38,4 +38,12 @@ CREATE TABLE IF NOT EXISTS push_log (
 
 -- Index for rate-limit check: most recent push per token.
 CREATE INDEX IF NOT EXISTS push_log_token_sent ON push_log (user_token, sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS device_tokens (
+  id             BIGSERIAL PRIMARY KEY,
+  user_token     TEXT NOT NULL,
+  apns_token     TEXT NOT NULL,
+  registered_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_token)
+);
 `;
