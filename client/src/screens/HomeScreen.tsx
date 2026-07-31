@@ -8,9 +8,21 @@ import { registerForPushNotifications } from '../platform/notifications';
 import { fetchFriendCount } from '../platform/api';
 import { getValidToken } from '../store/tokenManager';
 
+/** Nearby state fades back to idle after this duration (meditative, not alert-like). */
+const NEARBY_FADE_MS = 30 * 60 * 1000; // 30 minutes
+
 export function HomeScreen() {
   const [presence, setPresence] = useState<PresenceState>({ kind: 'idle' });
   const listenerRef = useRef<Notifications.Subscription | null>(null);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function setNearby(detectedAt: string) {
+    setPresence({ kind: 'nearby', detectedAt });
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+    fadeTimerRef.current = setTimeout(() => {
+      setPresence({ kind: 'idle' });
+    }, NEARBY_FADE_MS);
+  }
 
   useEffect(() => {
     // Check minimum-friends gate first; enter sleeping state if not met.
@@ -32,14 +44,14 @@ export function HomeScreen() {
     // Register APNs device token so the server can push to this device.
     registerForPushNotifications().catch(console.error);
 
-    // Listen for incoming notifications (including silent content-available pushes).
-    // Any incoming notification means the server matched a nearby friend.
+    // Listen for incoming notifications — any push means a nearby friend was matched.
     listenerRef.current = Notifications.addNotificationReceivedListener(() => {
-      setPresence({ kind: 'nearby', detectedAt: new Date().toISOString() });
+      setNearby(new Date().toISOString());
     });
 
     return () => {
       listenerRef.current?.remove();
+      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
     };
   }, []);
 

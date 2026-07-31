@@ -3,21 +3,26 @@ import { View, Text, StyleSheet } from 'react-native';
 import { PresenceState } from '../domain/types';
 import { strings } from '../i18n/strings';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme/tokens';
+import { relativeTime } from '../domain/time';
 
 interface Props {
   state: PresenceState;
+  now?: Date;
 }
 
-export function PresenceDisplay({ state }: Props) {
+export function PresenceDisplay({ state, now = new Date() }: Props) {
   const message = getMessage(state);
+  const caption = state.kind === 'nearby' ? relativeTime(state.detectedAt, now) : null;
+
   return (
     <View style={styles.container}>
       {message ? <Text style={styles.text}>{message}</Text> : null}
+      {caption ? <Text style={styles.caption}>{caption}</Text> : null}
     </View>
   );
 }
 
-function getMessage(state: PresenceState): string {
+export function getMessage(state: PresenceState): string {
   switch (state.kind) {
     case 'nearby':
       return strings.nearby;
@@ -42,5 +47,11 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodyLarge,
     color: COLORS.text,
     textAlign: 'center',
+  },
+  caption: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
   },
 });
