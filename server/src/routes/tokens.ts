@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
 import { issueToken, generateIdentityId } from '../domain/token';
-import { insertToken } from '../domain/repository';
+import { insertToken, purgeExpiredTokens, purgeExpiredBuckets } from '../domain/repository';
 
 export const tokensRouter = Router();
 
@@ -20,6 +20,12 @@ tokensRouter.post('/', async (req: Request, res: Response) => {
   const now = new Date();
   const record = issueToken(identityId, now);
   await insertToken(getPool(), record);
+
+  // Purge stale rows asynchronously — don't block the response.
+  Promise.all([
+    purgeExpiredTokens(getPool(), now),
+    purgeExpiredBuckets(getPool(), now),
+  ]).catch((err) => console.error('[tokens] purge failed:', err));
 
   res.status(201).json({
     token: record.token,

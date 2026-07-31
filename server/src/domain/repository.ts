@@ -242,6 +242,20 @@ export async function acceptInvite(
 }
 
 // ---------------------------------------------------------------------------
+// Rotation purge — remove expired rows so the DB doesn't accumulate stale data
+// ---------------------------------------------------------------------------
+
+/** Delete all ephemeral tokens that have passed their expiry time. */
+export async function purgeExpiredTokens(pool: Pool, now: Date): Promise<void> {
+  await pool.query(`DELETE FROM ephemeral_tokens WHERE expires_at <= $1`, [now]);
+}
+
+/** Delete all bucket entries that have passed their expiry time. */
+export async function purgeExpiredBuckets(pool: Pool, now: Date): Promise<void> {
+  await pool.query(`DELETE FROM buckets WHERE expires_at <= $1`, [now]);
+}
+
+// ---------------------------------------------------------------------------
 // Account deletion (GDPR / APPI)
 // ---------------------------------------------------------------------------
 
