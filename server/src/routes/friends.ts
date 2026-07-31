@@ -1,9 +1,24 @@
 import { Router, Request, Response } from 'express';
 import { getPool } from '../db';
-import { removeFriendEdge, getFriendCount } from '../domain/repository';
+import { removeFriendEdge, getFriendCount, getFriendIdentities } from '../domain/repository';
 import { MIN_FRIENDS_FOR_PUSH } from '../domain/match';
 
 export const friendsRouter = Router();
+
+/**
+ * GET /friends
+ * Header: x-identity-id: <identityId>
+ * Returns { friends: string[] } — the list of friend identity IDs.
+ */
+friendsRouter.get('/', async (req: Request, res: Response) => {
+  const identityId = req.headers['x-identity-id'];
+  if (typeof identityId !== 'string' || !identityId) {
+    res.status(400).json({ error: 'x-identity-id header required' });
+    return;
+  }
+  const friends = await getFriendIdentities(getPool(), identityId);
+  res.status(200).json({ friends });
+});
 
 /**
  * GET /friends/count

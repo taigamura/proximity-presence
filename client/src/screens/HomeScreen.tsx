@@ -1,17 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../nav/AppNavigator';
 import { PresenceDisplay } from '../ui/PresenceDisplay';
 import { PresenceState } from '../domain/types';
 import { startSignificantLocationMonitoring } from '../platform/backgroundLocation';
 import { registerForPushNotifications } from '../platform/notifications';
 import { fetchFriendCount } from '../platform/api';
 import { getValidToken } from '../store/tokenManager';
+import { COLORS, TYPOGRAPHY, SPACING } from '../theme/tokens';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 /** Nearby state fades back to idle after this duration (meditative, not alert-like). */
 const NEARBY_FADE_MS = 30 * 60 * 1000; // 30 minutes
 
-export function HomeScreen() {
+export function HomeScreen({ navigation }: Props) {
   const [presence, setPresence] = useState<PresenceState>({ kind: 'idle' });
   const listenerRef = useRef<Notifications.Subscription | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,6 +64,22 @@ export function HomeScreen() {
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <PresenceDisplay state={presence} />
+      <View style={styles.footer}>
+        <TouchableOpacity onPress={() => navigation.navigate('Friends')}>
+          <Text style={styles.footerLink}>Friends</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  footer: {
+    alignItems: 'center',
+    paddingBottom: SPACING.xl,
+  },
+  footerLink: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+  },
+});

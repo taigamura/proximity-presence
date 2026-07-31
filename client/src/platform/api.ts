@@ -94,3 +94,37 @@ export async function fetchFriendCount(
   }
   return res.json() as Promise<{ count: number; meetsGate: boolean }>;
 }
+
+/** Fetch the list of friend identity IDs for the given identity. */
+export async function fetchFriends(identityId: string): Promise<string[]> {
+  const res = await fetch(`${BASE_URL}/friends`, {
+    method: 'GET',
+    headers: { 'x-identity-id': identityId },
+  });
+  if (!res.ok) {
+    throw new Error(`GET /friends failed: ${res.status}`);
+  }
+  const data = await res.json() as { friends: string[] };
+  return data.friends;
+}
+
+/**
+ * Remove (block) a friend — severs the edge on both sides.
+ * After this call the two identities will no longer match or receive pushes
+ * for each other.
+ */
+export async function removeFriend(
+  identityId: string,
+  friendIdentityId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/friends/${encodeURIComponent(friendIdentityId)}`,
+    {
+      method: 'DELETE',
+      headers: { 'x-identity-id': identityId },
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`DELETE /friends/${friendIdentityId} failed: ${res.status}`);
+  }
+}

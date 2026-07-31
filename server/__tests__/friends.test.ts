@@ -34,6 +34,37 @@ afterAll(() => {
 
 const app = createApp();
 
+describe('GET /friends', () => {
+  it('returns 400 when x-identity-id header is missing', async () => {
+    const res = await request(app).get('/friends');
+    expect(res.status).toBe(400);
+  });
+
+  it('returns an empty friends array when identity has no edges', async () => {
+    const res = await request(app)
+      .get('/friends')
+      .set('x-identity-id', 'id_alice');
+    expect(res.status).toBe(200);
+    expect(res.body.friends).toEqual([]);
+  });
+
+  it('returns friend IDs derived from both edge directions', async () => {
+    setPool(makeStubPool({
+      friend_edges: [
+        { identity_a: 'id_alice', identity_b: 'id_bob' },
+        { identity_a: 'id_carol', identity_b: 'id_alice' },
+      ],
+    }));
+    const res = await request(app)
+      .get('/friends')
+      .set('x-identity-id', 'id_alice');
+    expect(res.status).toBe(200);
+    expect(res.body.friends).toContain('id_bob');
+    expect(res.body.friends).toContain('id_carol');
+    expect(res.body.friends).toHaveLength(2);
+  });
+});
+
 describe('GET /friends/count', () => {
   it('returns 400 when x-identity-id header is missing', async () => {
     const res = await request(app).get('/friends/count');
