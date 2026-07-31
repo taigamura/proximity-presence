@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Proximity Presence",
+    "slug": "proximity-presence",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "proximitypresence",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.taigamura.proximitypresence",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Proximity Presence needs your location to tell you when a friend is nearby — without revealing who. It only uploads a coarse area bucket, never precise coordinates.",
+        "NSLocationAlwaysUsageDescription": "Proximity Presence needs background location to detect nearby friends even when the app is closed. It only uploads a coarse area bucket, never precise coordinates.",
+        "NSLocationWhenInUseUsageDescription": "Proximity Presence needs your location to tell you when a friend is nearby.",
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Proximity Presence needs your location to tell you when a friend is nearby — without revealing who. It only uploads a coarse area bucket, never precise coordinates.",
+          "isIosBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ]
+    ]
+  }
+}
