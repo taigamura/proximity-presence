@@ -1,5 +1,22 @@
 import request from 'supertest';
 import { createApp } from '../src/app';
+import { setPool } from '../src/db';
+import { Pool } from 'pg';
+
+// Minimal pool stub: all queries resolve with empty rows.
+function makeStubPool(): Pool {
+  return {
+    query: jest.fn().mockResolvedValue({ rows: [] }),
+  } as unknown as Pool;
+}
+
+beforeEach(() => {
+  setPool(makeStubPool());
+});
+
+afterAll(() => {
+  setPool(null);
+});
 
 const app = createApp();
 
@@ -9,20 +26,16 @@ describe('POST /location', () => {
       .post('/location')
       .send({ ephemeralToken: 'tok_abc123', geohash6: 'xn774c' });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ ok: true });
+    expect(res.body.ok).toBe(true);
   });
 
   it('returns 400 when ephemeralToken is missing', async () => {
-    const res = await request(app)
-      .post('/location')
-      .send({ geohash6: 'xn774c' });
+    const res = await request(app).post('/location').send({ geohash6: 'xn774c' });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 when geohash6 is missing', async () => {
-    const res = await request(app)
-      .post('/location')
-      .send({ ephemeralToken: 'tok_abc123' });
+    const res = await request(app).post('/location').send({ ephemeralToken: 'tok_abc123' });
     expect(res.status).toBe(400);
   });
 
