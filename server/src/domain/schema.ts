@@ -46,4 +46,18 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   registered_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (user_token)
 );
+
+-- One-time invite codes. hashed_secret is SHA-256 hex of the shared secret.
+-- Single-use: accepted_at set on acceptance, subsequent attempts rejected.
+CREATE TABLE IF NOT EXISTS invites (
+  id             BIGSERIAL PRIMARY KEY,
+  code           TEXT        NOT NULL UNIQUE,
+  creator_token  TEXT        NOT NULL,
+  hashed_secret  TEXT        NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at     TIMESTAMPTZ NOT NULL,
+  accepted_at    TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS invites_code ON invites (code);
 `;

@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { BucketEntry, FriendEdge, PushLogEntry } from './match';
+import { Invite } from './invite';
 
 /** Upsert the current bucket for a token (replace any previous entry). */
 export async function upsertBucket(
@@ -93,5 +94,90 @@ export async function upsertDeviceToken(
      VALUES ($1, $2)
      ON CONFLICT (user_token) DO UPDATE SET apns_token = EXCLUDED.apns_token, registered_at = NOW()`,
     [userToken, apnsToken],
+  );
+}
+
+/** Persist a new invite row. */
+export async function insertInvite(
+  pool: Pool,
+  code: string,
+  creatorToken: string,
+  hashedSecret: string,
+  expiresAt: Date,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO invites (code, creator_token, hashed_secret, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [code, creatorToken, hashedSecret, expiresAt],
+  );
+}
+
+/** Fetch an invite by code, or null if not found. */
+export async function getInvite(pool: Pool, code: string): Promise<Invite | null> {
+  const res = await pool.query<{
+    code: string;
+    creator_token: string;
+    hashed_secret: string;
+    created_at: Date;
+    expires_at: Date;
+    accepted_at: Date | null;
+  }>(
+    `SELECT code, creator_token, hashed_secret, created_at, expires_at, accepted_at
+     FROM invites WHERE code = $1`,
+    [code],
+  );
+  if (res.rows.length === 0) return null;
+  const r = res.rows[0];
+  return {
+    code: r.code,
+    creatorToken: r.creator_token,
+    hashedSecret: r.hashed_secret,
+    createdAt: new Date(r.created_at),
+    expiresAt: new Date(r.expires_at),
+    acceptedAt: r.accepted_at ? new Date(r.accepted_at) : null,
+  };
+}
+
+/** Mark an invite as accepted and insert the friend edge atomically. */
+export async function acceptInvite(
+  pool: Pool,
+  code: string,
+  creatorToken: string,
+  acceptorToken: string,
+  now: Date,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE invites SET accepted_at = $1 WHERE code = $2`,
+      [now, code],
+    );
+    // Normalise edge: store (smaller, larger) so the UNIQUE constraint fires correctly.
+    const [a, b] = [creatorToken, acceptorToken].sort();
+    await client.query(
+      `INSERT INTO friend_edges (token_a, token_b) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [a, b],
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Remove a friend edge in both directions (block / remove). */
+export async function removeFriendEdge(
+  pool: Pool,
+  tokenA: string,
+  tokenB: string,
+): Promise<void> {
+  await pool.query(
+    `DELETE FROM friend_edges
+     WHERE (token_a = $1 AND token_b = $2)
+        OR (token_a = $2 AND token_b = $1)`,
+    [tokenA, tokenB],
   );
 }
