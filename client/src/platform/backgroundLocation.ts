@@ -2,8 +2,31 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { toGeohash6 } from './geohash';
 import { postLocation } from './api';
+import { getValidToken } from '../store/tokenManager';
 
 export const BACKGROUND_LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
+
+/**
+ * Core upload logic extracted for testability.
+ * Called by the TaskManager task body and directly in tests.
+ */
+export async function uploadLocation(location: Location.LocationObject): Promise<void> {
+  const { latitude, longitude } = location.coords;
+  const geohash6 = toGeohash6(latitude, longitude);
+
+  let ephemeralToken: string;
+  try {
+    const tokenResult = await getValidToken();
+    ephemeralToken = tokenResult.token;
+  } catch (err) {
+    console.error('[bg] token fetch failed, skipping upload:', err);
+    return;
+  }
+
+  await postLocation({ ephemeralToken, geohash6 }).catch((err) =>
+    console.error('[bg] postLocation failed:', err)
+  );
+}
 
 // Must be called at module load before any render.
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: TaskManager.TaskManagerTaskBody) => {
@@ -13,15 +36,7 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: TaskMan
   }
   const { locations } = data as { locations: Location.LocationObject[] };
   if (!locations?.length) return;
-
-  const { latitude, longitude } = locations[0].coords;
-  const geohash6 = toGeohash6(latitude, longitude);
-
-  // ephemeralToken will be fetched from secure storage in issue #4;
-  // for the skeleton, send a placeholder so the seam is wired up.
-  await postLocation({ ephemeralToken: 'placeholder', geohash6 }).catch((err) =>
-    console.error('[bg] postLocation failed:', err)
-  );
+  await uploadLocation(locations[0]);
 });
 
 export async function startSignificantLocationMonitoring(): Promise<void> {
