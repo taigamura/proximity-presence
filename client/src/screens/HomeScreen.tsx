@@ -9,7 +9,12 @@ export function HomeScreen() {
   const [presence, setPresence] = useState<PresenceState>({ kind: 'idle' });
 
   useEffect(() => {
-    startSignificantLocationMonitoring().catch(console.error);
+    startSignificantLocationMonitoring().then((result) => {
+      if (!result.ok) {
+        setPresence({ kind: 'sleeping', reason: 'no-background-permission' });
+      }
+    }).catch(console.error);
+
     registerForPushNotifications().catch(console.error);
   }, []);
 

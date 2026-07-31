@@ -6,6 +6,10 @@ import { getValidToken } from '../store/tokenManager';
 
 export const BACKGROUND_LOCATION_TASK = 'BACKGROUND_LOCATION_TASK';
 
+export type MonitoringResult =
+  | { ok: true }
+  | { ok: false; reason: 'no-foreground-permission' | 'no-background-permission' };
+
 /**
  * Core upload logic extracted for testability.
  * Called by the TaskManager task body and directly in tests.
@@ -39,15 +43,15 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: TaskMan
   await uploadLocation(locations[0]);
 });
 
-export async function startSignificantLocationMonitoring(): Promise<void> {
+export async function startSignificantLocationMonitoring(): Promise<MonitoringResult> {
   const { status: fg } = await Location.requestForegroundPermissionsAsync();
-  if (fg !== 'granted') return;
+  if (fg !== 'granted') return { ok: false, reason: 'no-foreground-permission' };
 
   const { status: bg } = await Location.requestBackgroundPermissionsAsync();
-  if (bg !== 'granted') return;
+  if (bg !== 'granted') return { ok: false, reason: 'no-background-permission' };
 
   const registered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-  if (registered) return;
+  if (registered) return { ok: true };
 
   await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
     accuracy: Location.Accuracy.Balanced,
@@ -60,6 +64,8 @@ export async function startSignificantLocationMonitoring(): Promise<void> {
     },
     pausesUpdatesAutomatically: true,
   });
+
+  return { ok: true };
 }
 
 export async function stopMonitoring(): Promise<void> {
