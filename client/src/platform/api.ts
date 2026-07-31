@@ -128,3 +128,18 @@ export async function removeFriend(
     throw new Error(`DELETE /friends/${friendIdentityId} failed: ${res.status}`);
   }
 }
+
+/**
+ * Delete all server-side data for this identity (GDPR Art. 17 / APPI erasure).
+ * The caller must supply a valid ephemeral token as proof of identity.
+ * After this returns the caller should clear all local state and reset to onboarding.
+ */
+export async function deleteAccount(ephemeralToken: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/account`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${ephemeralToken}` },
+  });
+  if (!res.ok) {
+    throw new Error(`DELETE /account failed: ${res.status}`);
+  }
+}

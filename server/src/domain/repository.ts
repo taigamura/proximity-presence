@@ -333,6 +333,10 @@ export async function deleteAccount(pool: Pool, identityId: string): Promise<voi
     await client.query(`DELETE FROM ephemeral_tokens WHERE identity_id = $1`, [identityId]);
     await client.query(`DELETE FROM buckets          WHERE identity_id = $1`, [identityId]);
     await client.query(`DELETE FROM push_log         WHERE identity_id = $1`, [identityId]);
+    await client.query(
+      `DELETE FROM pair_push_log WHERE identity_a = $1 OR identity_b = $1`,
+      [identityId],
+    );
     await client.query(`DELETE FROM device_tokens    WHERE identity_id = $1`, [identityId]);
     await client.query(
       `DELETE FROM friend_edges WHERE identity_a = $1 OR identity_b = $1`,

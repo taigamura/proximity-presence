@@ -11,8 +11,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../nav/AppNavigator';
-import { fetchFriends, removeFriend } from '../platform/api';
-import { getValidToken } from '../store/tokenManager';
+import { fetchFriends, removeFriend, deleteAccount } from '../platform/api';
+import { getValidToken, resetTokenState } from '../store/tokenManager';
+import { resetOnboarding } from '../store/onboarding';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme/tokens';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Friends'>;
@@ -53,6 +54,32 @@ export function FriendsScreen({ navigation }: Props) {
     );
   }
 
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Delete my data',
+      'This permanently deletes your account, all friend connections, and all data stored on the server. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete everything',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { token } = await getValidToken();
+              await deleteAccount(token);
+            } catch {
+              // Server-side deletion failed or token expired — proceed with local cleanup anyway
+            }
+            // Clear all local state so the app resets to onboarding on next launch.
+            resetTokenState();
+            await resetOnboarding();
+            navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
+          },
+        },
+      ],
+    );
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -87,6 +114,11 @@ export function FriendsScreen({ navigation }: Props) {
           )}
         />
       )}
+      <View style={styles.danger}>
+        <TouchableOpacity onPress={confirmDeleteAccount}>
+          <Text style={styles.deleteText}>Delete my data</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -143,5 +175,13 @@ const styles = StyleSheet.create({
   removeText: {
     ...TYPOGRAPHY.body,
     color: COLORS.accent,
+  },
+  danger: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xl,
+  },
+  deleteText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
   },
 });

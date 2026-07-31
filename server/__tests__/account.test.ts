@@ -91,11 +91,12 @@ describe('DELETE /account', () => {
     const calls: string[] = txClient.query.mock.calls.map((c: unknown[]) => c[0] as string);
     expect(calls[0]).toBe('BEGIN');
     expect(calls[calls.length - 1]).toBe('COMMIT');
-    // All six tables must be touched
+    // All seven tables must be touched (including pair_push_log added in #8)
     const combined = calls.join(' ');
     expect(combined).toMatch(/ephemeral_tokens/);
     expect(combined).toMatch(/buckets/);
     expect(combined).toMatch(/push_log/);
+    expect(combined).toMatch(/pair_push_log/);
     expect(combined).toMatch(/device_tokens/);
     expect(combined).toMatch(/friend_edges/);
     expect(combined).toMatch(/invites/);
