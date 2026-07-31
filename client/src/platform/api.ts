@@ -77,3 +77,20 @@ export async function acceptInvite(
     throw new Error(`POST /invites/${code}/accept failed: ${res.status}`);
   }
 }
+
+/**
+ * Fetch the current friend count and whether it meets the minimum-friends gate.
+ * The client uses this to decide whether to enter the sleeping/no-friends state.
+ */
+export async function fetchFriendCount(
+  identityId: string,
+): Promise<{ count: number; meetsGate: boolean }> {
+  const res = await fetch(`${BASE_URL}/friends/count`, {
+    method: 'GET',
+    headers: { 'x-identity-id': identityId },
+  });
+  if (!res.ok) {
+    throw new Error(`GET /friends/count failed: ${res.status}`);
+  }
+  return res.json() as Promise<{ count: number; meetsGate: boolean }>;
+}

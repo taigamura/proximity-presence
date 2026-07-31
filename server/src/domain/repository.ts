@@ -92,6 +92,16 @@ export async function getFriendEdges(pool: Pool, identityId: string): Promise<Fr
   return res.rows.map((r) => ({ identityA: r.identity_a, identityB: r.identity_b }));
 }
 
+/** Return the number of confirmed friend edges for an identity. */
+export async function getFriendCount(pool: Pool, identityId: string): Promise<number> {
+  const res = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM friend_edges
+     WHERE identity_a = $1 OR identity_b = $1`,
+    [identityId],
+  );
+  return parseInt(res.rows[0].count, 10);
+}
+
 /** Remove a friend edge in both directions (block / remove). */
 export async function removeFriendEdge(
   pool: Pool,

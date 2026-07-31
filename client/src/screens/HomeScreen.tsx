@@ -5,12 +5,23 @@ import { PresenceDisplay } from '../ui/PresenceDisplay';
 import { PresenceState } from '../domain/types';
 import { startSignificantLocationMonitoring } from '../platform/backgroundLocation';
 import { registerForPushNotifications } from '../platform/notifications';
+import { fetchFriendCount } from '../platform/api';
+import { getValidToken } from '../store/tokenManager';
 
 export function HomeScreen() {
   const [presence, setPresence] = useState<PresenceState>({ kind: 'idle' });
   const listenerRef = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
+    // Check minimum-friends gate first; enter sleeping state if not met.
+    getValidToken().then(({ identityId }) =>
+      fetchFriendCount(identityId).then(({ meetsGate }) => {
+        if (!meetsGate) {
+          setPresence({ kind: 'sleeping', reason: 'no-friends' });
+        }
+      })
+    ).catch(console.error);
+
     // Start background location monitoring; degrade to sleeping on denial.
     startSignificantLocationMonitoring().then((result) => {
       if (!result.ok) {
