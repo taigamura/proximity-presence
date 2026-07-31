@@ -29,3 +29,14 @@ export async function postLocation(payload: LocationUpload): Promise<void> {
     throw new Error(`POST /location failed: ${res.status}`);
   }
 }
+
+export async function registerDeviceToken(ephemeralToken: string, apnsToken: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/device-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ephemeralToken, apnsToken }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /device-token failed: ${res.status}`);
+  }
+}
