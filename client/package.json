@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^3.1.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
     "expo": "~52.0.0",
@@ -31,6 +32,10 @@
     "typescript": "~5.3.3"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": ["/node_modules/", "/__tests__/mocks/"],
+    "moduleNameMapper": {
+      "^@react-native-async-storage/async-storage$": "<rootDir>/src/__mocks__/async-storage.ts"
+    }
   }
 }
