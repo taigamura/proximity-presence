@@ -5,23 +5,23 @@ import { removeFriendEdge } from '../domain/repository';
 export const friendsRouter = Router();
 
 /**
- * DELETE /friends/:friendToken
- * Header: x-user-token: <callerToken>
- * Removes the edge between caller and friendToken (block / remove).
+ * DELETE /friends/:friendIdentity
+ * Header: x-identity-id: <callerIdentity>
+ * Removes the edge between caller and friendIdentity (block / remove).
  */
-friendsRouter.delete('/:friendToken', async (req: Request, res: Response) => {
-  const callerToken = req.headers['x-user-token'];
-  const { friendToken } = req.params;
+friendsRouter.delete('/:friendIdentity', async (req: Request, res: Response) => {
+  const callerIdentity = req.headers['x-identity-id'];
+  const { friendIdentity } = req.params;
 
-  if (typeof callerToken !== 'string' || !callerToken) {
-    res.status(400).json({ error: 'x-user-token header required' });
+  if (typeof callerIdentity !== 'string' || !callerIdentity) {
+    res.status(400).json({ error: 'x-identity-id header required' });
     return;
   }
-  if (callerToken === friendToken) {
+  if (callerIdentity === friendIdentity) {
     res.status(400).json({ error: 'cannot remove yourself' });
     return;
   }
 
-  await removeFriendEdge(getPool(), callerToken, friendToken);
+  await removeFriendEdge(getPool(), callerIdentity, friendIdentity);
   res.status(200).json({ ok: true });
 });

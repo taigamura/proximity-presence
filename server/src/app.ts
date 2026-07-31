@@ -2,6 +2,7 @@ import express from 'express';
 import { locationRouter } from './routes/location';
 import { inviteRouter } from './routes/invites';
 import { friendsRouter } from './routes/friends';
+import { tokensRouter } from './routes/tokens';
 import { getPool } from './db';
 import { SCHEMA_SQL } from './domain/schema';
 
@@ -13,6 +14,7 @@ export async function runMigrations(): Promise<void> {
 export function createApp() {
   const app = express();
   app.use(express.json());
+  app.use('/tokens', tokensRouter);
   app.use('/location', locationRouter);
   app.use('/invites', inviteRouter);
   app.use('/friends', friendsRouter);

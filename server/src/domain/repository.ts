@@ -1,18 +1,61 @@
 import { Pool } from 'pg';
 import { BucketEntry, FriendEdge, PushLogEntry } from './match';
 import { Invite } from './invite';
+import { EphemeralTokenRecord } from './token';
 
-/** Upsert the current bucket for a token (replace any previous entry). */
+// ---------------------------------------------------------------------------
+// Ephemeral tokens
+// ---------------------------------------------------------------------------
+
+/** Persist a newly issued token. */
+export async function insertToken(pool: Pool, record: EphemeralTokenRecord): Promise<void> {
+  await pool.query(
+    `INSERT INTO ephemeral_tokens (token, identity_id, issued_at, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [record.token, record.identityId, record.issuedAt, record.expiresAt],
+  );
+}
+
+/** Look up a token record, or null if not found / expired. */
+export async function getTokenRecord(
+  pool: Pool,
+  token: string,
+): Promise<EphemeralTokenRecord | null> {
+  const res = await pool.query<{
+    token: string;
+    identity_id: string;
+    issued_at: Date;
+    expires_at: Date;
+  }>(
+    `SELECT token, identity_id, issued_at, expires_at
+     FROM ephemeral_tokens WHERE token = $1`,
+    [token],
+  );
+  if (res.rows.length === 0) return null;
+  const r = res.rows[0];
+  return {
+    token: r.token,
+    identityId: r.identity_id,
+    issuedAt: new Date(r.issued_at),
+    expiresAt: new Date(r.expires_at),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Buckets
+// ---------------------------------------------------------------------------
+
+/** Upsert the current bucket for an identity. */
 export async function upsertBucket(
   pool: Pool,
-  userToken: string,
+  identityId: string,
   geohash6: string,
   expiresAt: Date,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO buckets (user_token, geohash6, expires_at)
+    `INSERT INTO buckets (identity_id, geohash6, expires_at)
      VALUES ($1, $2, $3)`,
-    [userToken, geohash6, expiresAt],
+    [identityId, geohash6, expiresAt],
   );
 }
 
@@ -22,93 +65,123 @@ export async function getActiveBucketsInCell(
   geohash6: string,
   now: Date,
 ): Promise<BucketEntry[]> {
-  const res = await pool.query<{ user_token: string; geohash6: string; expires_at: Date }>(
-    `SELECT user_token, geohash6, expires_at
+  const res = await pool.query<{ identity_id: string; geohash6: string; expires_at: Date }>(
+    `SELECT identity_id, geohash6, expires_at
      FROM buckets
      WHERE geohash6 = $1 AND expires_at > $2`,
     [geohash6, now],
   );
   return res.rows.map((r) => ({
-    userToken: r.user_token,
+    identityId: r.identity_id,
     geohash6: r.geohash6,
     expiresAt: new Date(r.expires_at),
   }));
 }
 
-/** Fetch all friend edges for a given token (both directions). */
-export async function getFriendEdges(pool: Pool, userToken: string): Promise<FriendEdge[]> {
-  const res = await pool.query<{ token_a: string; token_b: string }>(
-    `SELECT token_a, token_b FROM friend_edges
-     WHERE token_a = $1 OR token_b = $1`,
-    [userToken],
+// ---------------------------------------------------------------------------
+// Friend edges
+// ---------------------------------------------------------------------------
+
+/** Fetch all friend edges for a given identity (both directions). */
+export async function getFriendEdges(pool: Pool, identityId: string): Promise<FriendEdge[]> {
+  const res = await pool.query<{ identity_a: string; identity_b: string }>(
+    `SELECT identity_a, identity_b FROM friend_edges
+     WHERE identity_a = $1 OR identity_b = $1`,
+    [identityId],
   );
-  return res.rows.map((r) => ({ tokenA: r.token_a, tokenB: r.token_b }));
+  return res.rows.map((r) => ({ identityA: r.identity_a, identityB: r.identity_b }));
 }
 
-/** Fetch push log entries for a set of tokens within the rate-limit window. */
+/** Remove a friend edge in both directions (block / remove). */
+export async function removeFriendEdge(
+  pool: Pool,
+  identityA: string,
+  identityB: string,
+): Promise<void> {
+  await pool.query(
+    `DELETE FROM friend_edges
+     WHERE (identity_a = $1 AND identity_b = $2)
+        OR (identity_a = $2 AND identity_b = $1)`,
+    [identityA, identityB],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Push log
+// ---------------------------------------------------------------------------
+
+/** Fetch push log entries for a set of identities within the rate-limit window. */
 export async function getRecentPushes(
   pool: Pool,
-  tokens: string[],
+  identities: string[],
   since: Date,
 ): Promise<PushLogEntry[]> {
-  if (tokens.length === 0) return [];
-  const placeholders = tokens.map((_, i) => `$${i + 2}`).join(', ');
-  const res = await pool.query<{ user_token: string; sent_at: Date }>(
-    `SELECT user_token, sent_at FROM push_log
-     WHERE sent_at > $1 AND user_token IN (${placeholders})`,
-    [since, ...tokens],
+  if (identities.length === 0) return [];
+  const placeholders = identities.map((_, i) => `$${i + 2}`).join(', ');
+  const res = await pool.query<{ identity_id: string; sent_at: Date }>(
+    `SELECT identity_id, sent_at FROM push_log
+     WHERE sent_at > $1 AND identity_id IN (${placeholders})`,
+    [since, ...identities],
   );
-  return res.rows.map((r) => ({ userToken: r.user_token, sentAt: new Date(r.sent_at) }));
+  return res.rows.map((r) => ({ identityId: r.identity_id, sentAt: new Date(r.sent_at) }));
 }
 
-/** Record that a push was sent to a token. */
-export async function recordPush(pool: Pool, userToken: string, sentAt: Date): Promise<void> {
+/** Record that a push was sent to an identity. */
+export async function recordPush(pool: Pool, identityId: string, sentAt: Date): Promise<void> {
   await pool.query(
-    `INSERT INTO push_log (user_token, sent_at) VALUES ($1, $2)`,
-    [userToken, sentAt],
+    `INSERT INTO push_log (identity_id, sent_at) VALUES ($1, $2)`,
+    [identityId, sentAt],
   );
 }
 
-/** Look up APNs device tokens for a set of user tokens. */
+// ---------------------------------------------------------------------------
+// Device tokens (APNs)
+// ---------------------------------------------------------------------------
+
+/** Look up APNs device tokens for a set of identity IDs. */
 export async function getApnsTokens(
   pool: Pool,
-  userTokens: string[],
+  identities: string[],
 ): Promise<Map<string, string>> {
-  if (userTokens.length === 0) return new Map();
-  const placeholders = userTokens.map((_, i) => `$${i + 1}`).join(', ');
-  const res = await pool.query<{ user_token: string; apns_token: string }>(
-    `SELECT user_token, apns_token FROM device_tokens WHERE user_token IN (${placeholders})`,
-    userTokens,
+  if (identities.length === 0) return new Map();
+  const placeholders = identities.map((_, i) => `$${i + 1}`).join(', ');
+  const res = await pool.query<{ identity_id: string; apns_token: string }>(
+    `SELECT identity_id, apns_token FROM device_tokens WHERE identity_id IN (${placeholders})`,
+    identities,
   );
-  return new Map(res.rows.map((r) => [r.user_token, r.apns_token]));
+  return new Map(res.rows.map((r) => [r.identity_id, r.apns_token]));
 }
 
 /** Register or replace a device's APNs token. */
 export async function upsertDeviceToken(
   pool: Pool,
-  userToken: string,
+  identityId: string,
   apnsToken: string,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO device_tokens (user_token, apns_token)
+    `INSERT INTO device_tokens (identity_id, apns_token)
      VALUES ($1, $2)
-     ON CONFLICT (user_token) DO UPDATE SET apns_token = EXCLUDED.apns_token, registered_at = NOW()`,
-    [userToken, apnsToken],
+     ON CONFLICT (identity_id) DO UPDATE SET apns_token = EXCLUDED.apns_token, registered_at = NOW()`,
+    [identityId, apnsToken],
   );
 }
+
+// ---------------------------------------------------------------------------
+// Invites
+// ---------------------------------------------------------------------------
 
 /** Persist a new invite row. */
 export async function insertInvite(
   pool: Pool,
   code: string,
-  creatorToken: string,
+  creatorIdentity: string,
   hashedSecret: string,
   expiresAt: Date,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO invites (code, creator_token, hashed_secret, expires_at)
+    `INSERT INTO invites (code, creator_identity, hashed_secret, expires_at)
      VALUES ($1, $2, $3, $4)`,
-    [code, creatorToken, hashedSecret, expiresAt],
+    [code, creatorIdentity, hashedSecret, expiresAt],
   );
 }
 
@@ -116,13 +189,13 @@ export async function insertInvite(
 export async function getInvite(pool: Pool, code: string): Promise<Invite | null> {
   const res = await pool.query<{
     code: string;
-    creator_token: string;
+    creator_identity: string;
     hashed_secret: string;
     created_at: Date;
     expires_at: Date;
     accepted_at: Date | null;
   }>(
-    `SELECT code, creator_token, hashed_secret, created_at, expires_at, accepted_at
+    `SELECT code, creator_identity, hashed_secret, created_at, expires_at, accepted_at
      FROM invites WHERE code = $1`,
     [code],
   );
@@ -130,7 +203,7 @@ export async function getInvite(pool: Pool, code: string): Promise<Invite | null
   const r = res.rows[0];
   return {
     code: r.code,
-    creatorToken: r.creator_token,
+    creatorToken: r.creator_identity,
     hashedSecret: r.hashed_secret,
     createdAt: new Date(r.created_at),
     expiresAt: new Date(r.expires_at),
@@ -142,8 +215,8 @@ export async function getInvite(pool: Pool, code: string): Promise<Invite | null
 export async function acceptInvite(
   pool: Pool,
   code: string,
-  creatorToken: string,
-  acceptorToken: string,
+  creatorIdentity: string,
+  acceptorIdentity: string,
   now: Date,
 ): Promise<void> {
   const client = await pool.connect();
@@ -154,9 +227,9 @@ export async function acceptInvite(
       [now, code],
     );
     // Normalise edge: store (smaller, larger) so the UNIQUE constraint fires correctly.
-    const [a, b] = [creatorToken, acceptorToken].sort();
+    const [a, b] = [creatorIdentity, acceptorIdentity].sort();
     await client.query(
-      `INSERT INTO friend_edges (token_a, token_b) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      `INSERT INTO friend_edges (identity_a, identity_b) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
       [a, b],
     );
     await client.query('COMMIT');
@@ -166,18 +239,4 @@ export async function acceptInvite(
   } finally {
     client.release();
   }
-}
-
-/** Remove a friend edge in both directions (block / remove). */
-export async function removeFriendEdge(
-  pool: Pool,
-  tokenA: string,
-  tokenB: string,
-): Promise<void> {
-  await pool.query(
-    `DELETE FROM friend_edges
-     WHERE (token_a = $1 AND token_b = $2)
-        OR (token_a = $2 AND token_b = $1)`,
-    [tokenA, tokenB],
-  );
 }

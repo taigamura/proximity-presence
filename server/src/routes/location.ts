@@ -3,6 +3,7 @@ import { isValidLocationUpload } from '../domain/location';
 import { getPool } from '../db';
 import { runMatch, makeBucketEntry, RATE_LIMIT_MS } from '../domain/match';
 import {
+  getTokenRecord,
   upsertBucket,
   getActiveBucketsInCell,
   getFriendEdges,
@@ -10,6 +11,7 @@ import {
   recordPush,
   getApnsTokens,
 } from '../domain/repository';
+import { isTokenValid } from '../domain/token';
 import { getPushProvider } from '../platform/apns';
 
 export const locationRouter = Router();
@@ -24,22 +26,30 @@ locationRouter.post('/', async (req: Request, res: Response) => {
   const now = new Date();
   const pool = getPool();
 
-  const bucket = makeBucketEntry(ephemeralToken, geohash6, now);
-  await upsertBucket(pool, ephemeralToken, geohash6, bucket.expiresAt);
+  // Resolve the ephemeral token to a stable identity.
+  const tokenRecord = await getTokenRecord(pool, ephemeralToken);
+  if (!tokenRecord || !isTokenValid(tokenRecord, now)) {
+    res.status(401).json({ error: 'Token not found or expired' });
+    return;
+  }
+  const { identityId } = tokenRecord;
+
+  const bucket = makeBucketEntry(identityId, geohash6, now);
+  await upsertBucket(pool, identityId, geohash6, bucket.expiresAt);
 
   const [activeBuckets, friendEdges] = await Promise.all([
     getActiveBucketsInCell(pool, geohash6, now),
-    getFriendEdges(pool, ephemeralToken),
+    getFriendEdges(pool, identityId),
   ]);
 
   const rateLimitSince = new Date(now.getTime() - RATE_LIMIT_MS);
-  const candidateTokens = [ephemeralToken, ...friendEdges.map((e) =>
-    e.tokenA === ephemeralToken ? e.tokenB : e.tokenA,
+  const candidateIdentities = [identityId, ...friendEdges.map((e) =>
+    e.identityA === identityId ? e.identityB : e.identityA,
   )];
-  const recentPushes = await getRecentPushes(pool, candidateTokens, rateLimitSince);
+  const recentPushes = await getRecentPushes(pool, candidateIdentities, rateLimitSince);
 
-  const { tokensToNotify } = runMatch(
-    ephemeralToken,
+  const { identitiesToNotify } = runMatch(
+    identityId,
     geohash6,
     now,
     activeBuckets,
@@ -47,14 +57,14 @@ locationRouter.post('/', async (req: Request, res: Response) => {
     recentPushes,
   );
 
-  if (tokensToNotify.length > 0) {
-    const apnsTokenMap = await getApnsTokens(pool, tokensToNotify);
+  if (identitiesToNotify.length > 0) {
+    const apnsTokenMap = await getApnsTokens(pool, identitiesToNotify);
     const push = getPushProvider();
 
     await Promise.all(
-      tokensToNotify.map(async (userToken) => {
-        await recordPush(pool, userToken, now);
-        const apnsToken = apnsTokenMap.get(userToken);
+      identitiesToNotify.map(async (id) => {
+        await recordPush(pool, id, now);
+        const apnsToken = apnsTokenMap.get(id);
         if (apnsToken) {
           await push.sendSilentPush(apnsToken);
         }
@@ -62,5 +72,5 @@ locationRouter.post('/', async (req: Request, res: Response) => {
     );
   }
 
-  res.status(200).json({ ok: true, notified: tokensToNotify.length });
+  res.status(200).json({ ok: true, notified: identitiesToNotify.length });
 });

@@ -6,45 +6,56 @@
  */
 
 export const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS ephemeral_tokens (
+  id          BIGSERIAL PRIMARY KEY,
+  token       TEXT        NOT NULL UNIQUE,
+  identity_id TEXT        NOT NULL,
+  issued_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ephemeral_tokens_token      ON ephemeral_tokens (token);
+CREATE INDEX IF NOT EXISTS ephemeral_tokens_identity   ON ephemeral_tokens (identity_id, expires_at DESC);
+
 CREATE TABLE IF NOT EXISTS buckets (
   id             BIGSERIAL PRIMARY KEY,
-  user_token     TEXT        NOT NULL,
+  identity_id    TEXT        NOT NULL,
   geohash6       TEXT        NOT NULL,
   recorded_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at     TIMESTAMPTZ NOT NULL
 );
 
--- Index for the match query: find all tokens in the same bucket that haven't expired.
+-- Index for the match query: find all identity_ids in the same bucket that haven't expired.
 CREATE INDEX IF NOT EXISTS buckets_geohash6_expires
   ON buckets (geohash6, expires_at);
 
 CREATE TABLE IF NOT EXISTS friend_edges (
-  id         BIGSERIAL PRIMARY KEY,
-  token_a    TEXT NOT NULL,
-  token_b    TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (token_a, token_b)
+  id           BIGSERIAL PRIMARY KEY,
+  identity_a   TEXT NOT NULL,
+  identity_b   TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (identity_a, identity_b)
 );
 
--- Index for looking up all friends of a token.
-CREATE INDEX IF NOT EXISTS friend_edges_token_a ON friend_edges (token_a);
-CREATE INDEX IF NOT EXISTS friend_edges_token_b ON friend_edges (token_b);
+-- Index for looking up all friends of an identity.
+CREATE INDEX IF NOT EXISTS friend_edges_identity_a ON friend_edges (identity_a);
+CREATE INDEX IF NOT EXISTS friend_edges_identity_b ON friend_edges (identity_b);
 
 CREATE TABLE IF NOT EXISTS push_log (
-  id         BIGSERIAL PRIMARY KEY,
-  user_token TEXT        NOT NULL,
-  sent_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id          BIGSERIAL PRIMARY KEY,
+  identity_id TEXT        NOT NULL,
+  sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Index for rate-limit check: most recent push per token.
-CREATE INDEX IF NOT EXISTS push_log_token_sent ON push_log (user_token, sent_at DESC);
+-- Index for rate-limit check: most recent push per identity.
+CREATE INDEX IF NOT EXISTS push_log_identity_sent ON push_log (identity_id, sent_at DESC);
 
 CREATE TABLE IF NOT EXISTS device_tokens (
   id             BIGSERIAL PRIMARY KEY,
-  user_token     TEXT NOT NULL,
+  identity_id    TEXT NOT NULL,
   apns_token     TEXT NOT NULL,
   registered_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (user_token)
+  UNIQUE (identity_id)
 );
 
 -- One-time invite codes. hashed_secret is SHA-256 hex of the shared secret.
@@ -52,7 +63,7 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 CREATE TABLE IF NOT EXISTS invites (
   id             BIGSERIAL PRIMARY KEY,
   code           TEXT        NOT NULL UNIQUE,
-  creator_token  TEXT        NOT NULL,
+  creator_identity TEXT      NOT NULL,
   hashed_secret  TEXT        NOT NULL,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at     TIMESTAMPTZ NOT NULL,
