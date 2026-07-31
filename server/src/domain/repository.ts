@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { BucketEntry, FriendEdge, PushLogEntry } from './match';
+import { BucketEntry, FriendEdge, PushLogEntry, PairPushLogEntry } from './match';
 import { Invite } from './invite';
 import { EphemeralTokenRecord } from './token';
 
@@ -131,6 +131,47 @@ export async function recordPush(pool: Pool, identityId: string, sentAt: Date): 
   await pool.query(
     `INSERT INTO push_log (identity_id, sent_at) VALUES ($1, $2)`,
     [identityId, sentAt],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pair push log — per-pair rate limit
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch pair push log entries for all pairs involving the given identity
+ * within the rate-limit window.
+ * identity_a/identity_b are stored smallest-first in the DB.
+ */
+export async function getRecentPairPushes(
+  pool: Pool,
+  identityId: string,
+  since: Date,
+): Promise<PairPushLogEntry[]> {
+  const res = await pool.query<{ identity_a: string; identity_b: string; sent_at: Date }>(
+    `SELECT identity_a, identity_b, sent_at FROM pair_push_log
+     WHERE sent_at > $1 AND (identity_a = $2 OR identity_b = $2)`,
+    [since, identityId],
+  );
+  return res.rows.map((r) => ({
+    identityA: r.identity_a,
+    identityB: r.identity_b,
+    sentAt: new Date(r.sent_at),
+  }));
+}
+
+/** Record that a push was sent for a specific friend pair. */
+export async function recordPairPush(
+  pool: Pool,
+  identityA: string,
+  identityB: string,
+  sentAt: Date,
+): Promise<void> {
+  // Normalise: store smaller ID first.
+  const [a, b] = identityA < identityB ? [identityA, identityB] : [identityB, identityA];
+  await pool.query(
+    `INSERT INTO pair_push_log (identity_a, identity_b, sent_at) VALUES ($1, $2, $3)`,
+    [a, b, sentAt],
   );
 }
 

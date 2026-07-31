@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS push_log (
 -- Index for rate-limit check: most recent push per identity.
 CREATE INDEX IF NOT EXISTS push_log_identity_sent ON push_log (identity_id, sent_at DESC);
 
+-- Per-pair push log: tracks the last push for each specific friend-pair (alice↔bob).
+-- identity_a/identity_b are always stored smallest-first for a stable unique key.
+CREATE TABLE IF NOT EXISTS pair_push_log (
+  id          BIGSERIAL PRIMARY KEY,
+  identity_a  TEXT        NOT NULL,
+  identity_b  TEXT        NOT NULL,
+  sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS pair_push_log_pair_sent
+  ON pair_push_log (identity_a, identity_b, sent_at DESC);
+
 CREATE TABLE IF NOT EXISTS device_tokens (
   id             BIGSERIAL PRIMARY KEY,
   identity_id    TEXT NOT NULL,

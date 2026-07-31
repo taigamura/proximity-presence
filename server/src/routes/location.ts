@@ -1,14 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { isValidLocationUpload } from '../domain/location';
 import { getPool } from '../db';
-import { runMatch, makeBucketEntry, RATE_LIMIT_MS } from '../domain/match';
+import { runMatch, makeBucketEntry, RATE_LIMIT_MS, normalisePair } from '../domain/match';
 import {
   getTokenRecord,
   upsertBucket,
   getActiveBucketsInCell,
   getFriendEdges,
-  getRecentPushes,
-  recordPush,
+  getRecentPairPushes,
+  recordPairPush,
   getApnsTokens,
 } from '../domain/repository';
 import { isTokenValid } from '../domain/token';
@@ -43,10 +43,7 @@ locationRouter.post('/', async (req: Request, res: Response) => {
   ]);
 
   const rateLimitSince = new Date(now.getTime() - RATE_LIMIT_MS);
-  const candidateIdentities = [identityId, ...friendEdges.map((e) =>
-    e.identityA === identityId ? e.identityB : e.identityA,
-  )];
-  const recentPushes = await getRecentPushes(pool, candidateIdentities, rateLimitSince);
+  const recentPairPushes = await getRecentPairPushes(pool, identityId, rateLimitSince);
 
   const { identitiesToNotify } = runMatch(
     identityId,
@@ -54,22 +51,27 @@ locationRouter.post('/', async (req: Request, res: Response) => {
     now,
     activeBuckets,
     friendEdges,
-    recentPushes,
+    recentPairPushes,
   );
 
   if (identitiesToNotify.length > 0) {
     const apnsTokenMap = await getApnsTokens(pool, identitiesToNotify);
     const push = getPushProvider();
 
-    await Promise.all(
-      identitiesToNotify.map(async (id) => {
-        await recordPush(pool, id, now);
+    // Record one pair_push_log entry per qualifying friend pair and send pushes.
+    const notifiedFriends = identitiesToNotify.filter((id) => id !== identityId);
+    await Promise.all([
+      ...notifiedFriends.map((friendId) => {
+        const { identityA, identityB } = normalisePair(identityId, friendId);
+        return recordPairPush(pool, identityA, identityB, now);
+      }),
+      ...identitiesToNotify.map(async (id) => {
         const apnsToken = apnsTokenMap.get(id);
         if (apnsToken) {
           await push.sendSilentPush(apnsToken);
         }
       }),
-    );
+    ]);
   }
 
   res.status(200).json({ ok: true, notified: identitiesToNotify.length });

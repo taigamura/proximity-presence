@@ -2,11 +2,14 @@ import {
   runMatch,
   getFriendsOf,
   makeBucketEntry,
+  pairKey,
+  normalisePair,
   BucketEntry,
   FriendEdge,
-  PushLogEntry,
+  PairPushLogEntry,
   BUCKET_TTL_MS,
   RATE_LIMIT_MS,
+  BATCH_WINDOW_MS,
   MIN_FRIENDS_FOR_PUSH,
 } from '../src/domain/match';
 
@@ -30,6 +33,11 @@ function enoughFriends(uploaderIdentity: string, nearbyFriend: string): FriendEd
   return makeEdges(uploaderIdentity, [nearbyFriend, ...extras]);
 }
 
+function recentPairPush(a: string, b: string, msBefore: number): PairPushLogEntry {
+  const { identityA, identityB } = normalisePair(a, b);
+  return { identityA, identityB, sentAt: new Date(NOW.getTime() - msBefore) };
+}
+
 describe('getFriendsOf', () => {
   it('returns friends from both directions of an edge', () => {
     const edges: FriendEdge[] = [
@@ -49,6 +57,18 @@ describe('makeBucketEntry', () => {
     const entry = makeBucketEntry('id_alice', CELL, NOW);
     expect(entry.expiresAt.getTime()).toBe(NOW.getTime() + BUCKET_TTL_MS);
     expect(entry.identityId).toBe('id_alice');
+  });
+});
+
+describe('pairKey / normalisePair', () => {
+  it('pairKey is order-stable', () => {
+    expect(pairKey('alice', 'bob')).toBe(pairKey('bob', 'alice'));
+  });
+
+  it('normalisePair puts the lexicographically smaller ID in identityA', () => {
+    const p = normalisePair('bob', 'alice');
+    expect(p.identityA).toBe('alice');
+    expect(p.identityB).toBe('bob');
   });
 });
 
@@ -88,18 +108,15 @@ describe('runMatch', () => {
     expect(identitiesToNotify).toHaveLength(0);
   });
 
-  it('skips an identity that was pushed within the rate-limit window', () => {
+  it('skips a pair that was pushed within the rate-limit window', () => {
     const uploader = 'id_alice';
     const friend = 'id_bob';
     const edges = enoughFriends(uploader, friend);
     const buckets = [activeBucket(friend)];
-    const recentPushes: PushLogEntry[] = [
-      { identityId: uploader, sentAt: new Date(NOW.getTime() - RATE_LIMIT_MS / 2) },
-    ];
+    const pairs = [recentPairPush(uploader, friend, RATE_LIMIT_MS / 2)];
 
-    const { identitiesToNotify } = runMatch(uploader, CELL, NOW, buckets, edges, recentPushes);
-    expect(identitiesToNotify).not.toContain(uploader);
-    expect(identitiesToNotify).toContain(friend);
+    const { identitiesToNotify } = runMatch(uploader, CELL, NOW, buckets, edges, pairs);
+    expect(identitiesToNotify).toHaveLength(0);
   });
 
   it('allows a push after the rate-limit window has elapsed', () => {
@@ -107,12 +124,41 @@ describe('runMatch', () => {
     const friend = 'id_bob';
     const edges = enoughFriends(uploader, friend);
     const buckets = [activeBucket(friend)];
-    const recentPushes: PushLogEntry[] = [
-      { identityId: uploader, sentAt: new Date(NOW.getTime() - RATE_LIMIT_MS - 60_000) },
-    ];
+    const pairs = [recentPairPush(uploader, friend, RATE_LIMIT_MS + 60_000)];
 
-    const { identitiesToNotify } = runMatch(uploader, CELL, NOW, buckets, edges, recentPushes);
+    const { identitiesToNotify } = runMatch(uploader, CELL, NOW, buckets, edges, pairs);
     expect(identitiesToNotify).toContain(uploader);
+    expect(identitiesToNotify).toContain(friend);
+  });
+
+  it('batching: suppresses a second upload within BATCH_WINDOW_MS for the same pair', () => {
+    const uploader = 'id_alice';
+    const friend = 'id_bob';
+    const edges = enoughFriends(uploader, friend);
+    const buckets = [activeBucket(friend)];
+    // Push sent just BATCH_WINDOW_MS/2 ago — still within the rate-limit window.
+    const pairs = [recentPairPush(uploader, friend, BATCH_WINDOW_MS / 2)];
+
+    const { identitiesToNotify } = runMatch(uploader, CELL, NOW, buckets, edges, pairs);
+    expect(identitiesToNotify).toHaveLength(0);
+  });
+
+  it('per-pair: alice-bob rate-limit does not suppress alice-carol pair', () => {
+    const uploader = 'id_alice';
+    const bob = 'id_bob';
+    const carol = 'id_carol';
+    // Alice has enough friends (bob + carol + extras).
+    const extras = Array.from({ length: MIN_FRIENDS_FOR_PUSH - 2 }, (_, i) => `extra_${i}`);
+    const edges = makeEdges(uploader, [bob, carol, ...extras]);
+    const buckets = [activeBucket(bob), activeBucket(carol)];
+    // alice-bob pair was recently pushed, but alice-carol was not.
+    const pairs = [recentPairPush(uploader, bob, RATE_LIMIT_MS / 2)];
+
+    const { identitiesToNotify } = runMatch(uploader, CELL, NOW, buckets, edges, pairs);
+    // alice and carol should be notified; bob should NOT.
+    expect(identitiesToNotify).toContain(uploader);
+    expect(identitiesToNotify).toContain(carol);
+    expect(identitiesToNotify).not.toContain(bob);
   });
 
   it('does not notify a stranger in the same cell', () => {
