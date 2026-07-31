@@ -1,5 +1,5 @@
 # Ralph Fix Plan (queue item)
 
 ## Current Task
-- [x] Implement GitHub issue #3 (already implemented — match.ts + tests passing)
-  - Spec: .ralph/specs/issue-3.md
+- [x] Implement GitHub issue #4 — already implemented in prior loops, verify gate green
+  - Spec: .ralph/specs/issue-4.md
