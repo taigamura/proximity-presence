@@ -4,6 +4,7 @@ import { inviteRouter } from './routes/invites';
 import { friendsRouter } from './routes/friends';
 import { tokensRouter } from './routes/tokens';
 import { deviceTokenRouter } from './routes/deviceToken';
+import { accountRouter } from './routes/account';
 import { getPool } from './db';
 import { SCHEMA_SQL } from './domain/schema';
 
@@ -20,6 +21,7 @@ export function createApp() {
   app.use('/location', locationRouter);
   app.use('/invites', inviteRouter);
   app.use('/friends', friendsRouter);
+  app.use('/account', accountRouter);
   app.get('/health', (_req, res) => res.json({ ok: true }));
   return app;
 }

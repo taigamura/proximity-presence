@@ -240,3 +240,33 @@ export async function acceptInvite(
     client.release();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Account deletion (GDPR / APPI)
+// ---------------------------------------------------------------------------
+
+/**
+ * Atomically delete all data associated with an identity.
+ * Covers every table that stores identity_id or identity edges.
+ */
+export async function deleteAccount(pool: Pool, identityId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM ephemeral_tokens WHERE identity_id = $1`, [identityId]);
+    await client.query(`DELETE FROM buckets          WHERE identity_id = $1`, [identityId]);
+    await client.query(`DELETE FROM push_log         WHERE identity_id = $1`, [identityId]);
+    await client.query(`DELETE FROM device_tokens    WHERE identity_id = $1`, [identityId]);
+    await client.query(
+      `DELETE FROM friend_edges WHERE identity_a = $1 OR identity_b = $1`,
+      [identityId],
+    );
+    await client.query(`DELETE FROM invites WHERE creator_identity = $1`, [identityId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
