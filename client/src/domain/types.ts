@@ -28,3 +28,13 @@ export type PresenceState =
   | { kind: 'idle' }
   | { kind: 'nearby'; detectedAt: string }
   | { kind: 'sleeping'; reason: 'no-background-permission' | 'no-friends' };
+
+/**
+ * Returned by POST /invites. The secret is shown once — user shares it
+ * out-of-band with the intended recipient.
+ */
+export interface InviteResult {
+  code: string;
+  secret: string;
+  expiresAt: string; // ISO 8601
+}

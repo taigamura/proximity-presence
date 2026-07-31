@@ -1,4 +1,4 @@
-import { LocationUpload, EphemeralToken } from '../domain/types';
+import { LocationUpload, EphemeralToken, InviteResult } from '../domain/types';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -38,5 +38,42 @@ export async function registerDeviceToken(ephemeralToken: string, apnsToken: str
   });
   if (!res.ok) {
     throw new Error(`POST /device-token failed: ${res.status}`);
+  }
+}
+
+/**
+ * Generate an invite link. Returns the one-time secret that the user must
+ * share out-of-band with the intended recipient. The secret is never stored
+ * by the server — only its SHA-256 hash is persisted.
+ */
+export async function generateInvite(identityId: string): Promise<InviteResult> {
+  const res = await fetch(`${BASE_URL}/invites`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creatorIdentity: identityId }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /invites failed: ${res.status}`);
+  }
+  return res.json() as Promise<InviteResult>;
+}
+
+/**
+ * Accept an invite. The recipient supplies the invite code (from the link)
+ * and the shared secret (sent out-of-band). On success the server creates a
+ * friend edge keyed to the two identity IDs.
+ */
+export async function acceptInvite(
+  code: string,
+  identityId: string,
+  secret: string,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/invites/${encodeURIComponent(code)}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ acceptorIdentity: identityId, secret }),
+  });
+  if (!res.ok) {
+    throw new Error(`POST /invites/${code}/accept failed: ${res.status}`);
   }
 }
