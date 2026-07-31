@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "proximitypresence",
     "userInterfaceStyle": "automatic",
+    "privacyPolicyUrl": "https://taigamura.github.io/proximity-presence/privacy",
     "ios": {
       "bundleIdentifier": "com.taigamura.proximitypresence",
       "supportsTablet": false,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../nav/AppNavigator';
@@ -7,6 +7,8 @@ import { strings } from '../i18n/strings';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme/tokens';
 import { startSignificantLocationMonitoring } from '../platform/backgroundLocation';
 import { markOnboardingComplete } from '../store/onboarding';
+
+const PRIVACY_POLICY_URL = 'https://taigamura.github.io/proximity-presence/privacy';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
@@ -34,6 +36,9 @@ export function OnboardingScreen({ navigation }: Props) {
         </TouchableOpacity>
         <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
           <Text style={styles.skipText}>{strings.onboarding_skip}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>
+          <Text style={styles.privacyText}>{strings.onboarding_privacy}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -65,12 +70,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
     paddingBottom: SPACING.xl,
     gap: SPACING.md,
+    alignItems: 'center',
   },
   ctaButton: {
     backgroundColor: COLORS.accent,
     borderRadius: 12,
     paddingVertical: SPACING.md,
     alignItems: 'center',
+    alignSelf: 'stretch',
   },
   ctaText: {
     ...TYPOGRAPHY.body,
@@ -78,11 +85,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   skipButton: {
-    alignItems: 'center',
     paddingVertical: SPACING.sm,
   },
   skipText: {
     ...TYPOGRAPHY.body,
     color: COLORS.textMuted,
+  },
+  privacyText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textMuted,
+    textDecorationLine: 'underline',
   },
 });

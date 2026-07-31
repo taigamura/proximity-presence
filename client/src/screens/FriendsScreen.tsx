@@ -14,6 +14,7 @@ import { RootStackParamList } from '../nav/AppNavigator';
 import { fetchFriends, removeFriend, deleteAccount } from '../platform/api';
 import { getValidToken, resetTokenState } from '../store/tokenManager';
 import { resetOnboarding } from '../store/onboarding';
+import { strings } from '../i18n/strings';
 import { COLORS, TYPOGRAPHY, SPACING } from '../theme/tokens';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Friends'>;
@@ -37,12 +38,12 @@ export function FriendsScreen({ navigation }: Props) {
 
   function confirmRemove(friendId: string) {
     Alert.alert(
-      'Remove friend',
-      'This will sever the connection on both sides. Neither of you will receive presence signals from the other.',
+      strings.friends_report_title,
+      strings.friends_report_body,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove',
+          text: strings.friends_report_action,
           style: 'destructive',
           onPress: async () => {
             if (!identityId) return;
@@ -108,7 +109,7 @@ export function FriendsScreen({ navigation }: Props) {
             <View style={styles.row}>
               <Text style={styles.friendId} numberOfLines={1}>{item}</Text>
               <TouchableOpacity onPress={() => confirmRemove(item)}>
-                <Text style={styles.removeText}>Remove</Text>
+                <Text style={styles.removeText}>Report</Text>
               </TouchableOpacity>
             </View>
           )}
